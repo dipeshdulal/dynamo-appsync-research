@@ -20,12 +20,12 @@ export const authOptions: AuthOptions = {
         },
         async session({ session, token }) {
             if (session) {
-                session.accessToken = token.accessToken;
-                session.user.uid = token.id;
+                session.accessToken = token.accessToken ?? '';
+                session.user.uid = token.uid ?? '';
             }
             return session;
         }
-    }
+    },
 }
 
 export default NextAuth(authOptions)
