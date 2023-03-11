@@ -29,7 +29,7 @@ const reconcile = <T extends BaseMessage>(msgSource: Array<T>, msg: T): Array<T>
 }
 
 
-type StartFunction<T> = (c: ReadableStreamController<T>) => void;
+type StartFunction<T> = (c: ReadableStreamDefaultController<T>) => void;
 export const buildStream = <T>(start: StartFunction<T>): ReadableStream<T> =>  {
     return new ReadableStream({
         start,
@@ -50,10 +50,19 @@ export const useChat = <T extends BaseMessage>(source: ReadableStream<T>, send: 
     }, [send])
 
     useEffect(() => {
+        console.log("new stream!!")
         const reader = source.getReader();
-        reader.read().then(({value}) => value && setMessages(m => reconcile(m, value)));
+        reader.read().then(({value}) => {
+            console.log(value);
+            if (value){
+                setMessages(m => reconcile(m, value))
+            } 
+        });
         return () => {
-            reader.cancel();
+            console.log("cancelled reader");
+            if (!reader.closed) {
+                reader.cancel();
+            }
         }
     }, [source])
 
