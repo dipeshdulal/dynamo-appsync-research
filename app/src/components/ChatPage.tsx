@@ -1,7 +1,9 @@
-import { useCallback, useMemo, useRef, useState } from "react"
-import { buildStream, useChat } from "./useChat"
+import { useCallback, useMemo, useState } from "react"
+import { useChat } from "./useChat"
 import { v4 as uuidv4 } from "uuid";
 import { useSession } from "next-auth/react";
+import { client } from "@/client"
+import { gql } from "@apollo/client";
 
 interface Message {
     id: string;
@@ -10,32 +12,64 @@ interface Message {
     created_at: Date;
     sent_by: string;
 }
-const source = buildStream<Message>((controller) => {
-    setInterval(() => {
-        console.log("enqueue...")
-        const date = new Date()
-        const message = {created_at: date, id: date.toISOString(), text: "new message", type: "text", sent_by: "2", }
-        controller.enqueue(message)
-    }, 1000)
-})
+
 
 export const ChatPage: React.FC = () => {
     const [text, setText] = useState("");
     const { data } = useSession();
 
     const onSend = useCallback(async (msg: Message) => {
-        // TODO: send message from api
-        return new Promise<Message>((resolve, reject) => {
-            setTimeout(() => {
-                const random = Math.random()
-                if (random > 0.5) {
-                    resolve(msg)
-                    return;
+
+        const response = await client.mutate({
+            mutation: gql`mutation message($id: ID!,$text: String, $type: String) {
+                createChatMessage(messageId: $id, message: $text, roomId:"123", type: $type) {
+                  ChatId
+                  CreatedAt
+                  Message
+                  RoomId
+                  Sender
+                  Type
                 }
-                reject("error sending message.")
-            }, 1000);
+              }`,
+              variables: {
+                text: msg.text,
+                type: msg.type,
+                id: msg.id
+              },
+            context: {
+                headers: {
+                    authorization: `Bearer ${data?.accessToken}`
+                }
+            }
+        })
+        const msgResponse = response?.data?.createChatMessage;
+        return {...msg, sent_by: msgResponse.sender}
+    }, [data?.accessToken]);
+
+    const source = useMemo(() => {
+        const obs = client.subscribe({
+            query: gql`subscription subscribeToMessage{
+            subscribeToChatMessageCreate(RoomId:"123") {
+                Type
+                ChatId
+                Message
+                RoomId
+                Sender
+                CreatedAt
+            }
+          }`,
         });
-    }, []);
+        return obs.map(m => {
+           const msg = m.data?.subscribeToChatMessageCreate as any;
+           return {
+                id: msg.ChatId,
+                text: msg.Message,
+                type: msg.Type,
+                created_at: msg.CreatedAt,
+                sent_by: msg.Sender,
+           }
+        })
+    }, [])
 
     const { sendMessage, messages } = useChat(source, onSend)
 

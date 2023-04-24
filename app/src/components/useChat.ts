@@ -1,3 +1,4 @@
+import { Observable } from "@apollo/client";
 import { useCallback, useEffect, useState } from "react";
 
 interface BaseMessage {
@@ -29,14 +30,7 @@ const reconcile = <T extends BaseMessage>(msgSource: Array<T>, msg: T): Array<T>
 }
 
 
-type StartFunction<T> = (c: ReadableStreamDefaultController<T>) => void;
-export const buildStream = <T>(start: StartFunction<T>): ReadableStream<T> =>  {
-    return new ReadableStream({
-        start,
-    });
-}
-
-export const useChat = <T extends BaseMessage>(source: ReadableStream<T>, send: SendMessage<T>) => {
+export const useChat = <T extends BaseMessage>(source: Observable<T>, send: SendMessage<T>) => {
     const [messages, setMessages] = useState<Array<T>>([]);
 
     const sendMessage = useCallback(async (message: T) => {
@@ -50,19 +44,13 @@ export const useChat = <T extends BaseMessage>(source: ReadableStream<T>, send: 
     }, [send])
 
     useEffect(() => {
-        console.log("new stream!!")
-        const reader = source.getReader();
-        reader.read().then(({value}) => {
-            console.log(value);
-            if (value){
-                setMessages(m => reconcile(m, value))
-            } 
+        const subscription = source.subscribe((data) => {
+            if (data) {
+                setMessages(m => reconcile(m, data))
+            }
         });
         return () => {
-            console.log("cancelled reader");
-            if (!reader.closed) {
-                reader.cancel();
-            }
+            subscription.unsubscribe();
         }
     }, [source])
 
